@@ -1,0 +1,37 @@
+name: Custom Daily NEPSE Archiver
+
+on:
+  schedule:
+    # 3:45 PM Nepal Time (NPT) converts to exactly 10:00 AM UTC.
+    # Runs Sunday through Thursday to compile market details post-closing settlement.
+    - cron: '0 10 * * 0-6'
+  workflow_dispatch: # Injects a manual "Run workflow" action button inside the GitHub UI dashboard
+
+jobs:
+  scrape_and_archive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Crucial parameter: Grants the host VM server permission to commit data changes back to repo
+    steps:
+      - name: Checkout Code Repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Go Toolchain Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+
+      - name: Execute Scraper Engine
+        run: |
+          export GOTOOLCHAIN=go1.25.0
+          go get github.com/voidarchive/go-nepse
+          go run main.go
+
+      - name: Commit and Push Daily Archive
+        run: |
+          git config --global user.name "NEPSE Automated Engine"
+          git config --global user.email "engine@github.com"
+          git add data/*.json
+          
+          # Only push changes if a new file was actually written to prevent empty loop failures on trading holidays
+          git diff --quiet && git diff --staged --quiet || (git commit -m "System: Logged daily share prices [$(date)]" && git push)
